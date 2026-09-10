@@ -1,6 +1,13 @@
+import { visitReady } from "../support/visit";
+
 context("Contact recovery", () => {
 	it("retains a failed draft and sends it successfully on retry", () => {
-		cy.visit("/contact");
+		cy.intercept("GET", "/assets/contact-*.js", request => {
+			request.continue(response => {
+				response.setDelay(500);
+			});
+		});
+		visitReady("/contact");
 		cy.get("#name").type("Cypress Visitor");
 		cy.get("#email").type("visitor@example.com");
 		cy.get("#message").type("Please share more about the Restoration.");
@@ -22,7 +29,7 @@ context("Contact recovery", () => {
 	});
 
 	it("keeps native required-field validation", () => {
-		cy.visit("/contact");
+		visitReady("/contact");
 		cy.get('button[type="submit"]').click();
 		cy.get("#name").should($input => {
 			expect(($input[0] as HTMLInputElement).validity.valueMissing).to.eq(true);

@@ -1,6 +1,8 @@
+import { visitReady } from "../support/visit";
+
 context("Production navigation", () => {
 	it("uses page metadata and moves focus after navigation", () => {
-		cy.visit("/");
+		visitReady("/");
 		cy.get('header a[href="/about"]').click();
 		cy.title().should("eq", "About | The Restoration");
 		cy.get('link[rel="canonical"]').should("have.attr", "href", "https://therestoration.jacobdanderson.net/about");
@@ -14,7 +16,7 @@ context("Production navigation", () => {
 	it("keeps the mobile menu above the map and closes it after selection", () => {
 		cy.viewport(390, 844);
 		cy.intercept("https://*.tile.openstreetmap.org/**", { statusCode: 204 });
-		cy.visit("/map");
+		visitReady("/map");
 		cy.get(".leaflet-marker-icon").should("have.length", 6);
 		cy.get(".hamburger").should("have.attr", "aria-expanded", "false").click();
 		cy.get('header a[href="/contact"]').should("be.visible").click();
@@ -26,7 +28,7 @@ context("Production navigation", () => {
 
 	it("keeps working after revisiting the map", () => {
 		cy.intercept("https://*.tile.openstreetmap.org/**", { statusCode: 204 });
-		cy.visit("/map");
+		visitReady("/map");
 		cy.get(".leaflet-marker-icon").should("have.length", 6);
 		cy.get('header a[href="/about"]').click();
 		cy.get('header a[href="/map"]').click();
@@ -48,7 +50,7 @@ context("Production navigation", () => {
 		cy.request({ url: "/missing-page", failOnStatusCode: false, headers: { Accept: "text/html" } })
 			.its("status")
 			.should("eq", 404);
-		cy.visit("/missing-page", { failOnStatusCode: false });
+		visitReady("/missing-page", { failOnStatusCode: false });
 		cy.contains("h1", "Page not found").should("be.visible");
 		cy.get('meta[name="robots"]').should("have.attr", "content", "noindex,nofollow");
 		cy.get('link[rel="canonical"]').should("not.exist");

@@ -1,6 +1,8 @@
+import { visitReady } from "../support/visit";
+
 context("Basic", () => {
 	beforeEach(() => {
-		cy.visit("/");
+		visitReady("/");
 	});
 
 	it("shows the home hero and navigation", () => {
@@ -48,9 +50,7 @@ context("Basic", () => {
 		cy.url().should("include", "/map");
 		cy.contains("h1", "Interactive Map of the Restoration").should("be.visible");
 
-		cy.get(".leaflet-pane .leaflet-marker-icon", { timeout: 10000 })
-			.first()
-			.click({ force: true });
+		cy.get(".leaflet-pane .leaflet-marker-icon", { timeout: 10000 }).first().click({ force: true });
 		cy.get(".leaflet-popup-content", { timeout: 10000 }).should("contain", "Palmyra, New York");
 	});
 
@@ -69,16 +69,12 @@ context("Basic", () => {
 		cy.get("#message").type("Great site!");
 		cy.contains("button", "Send Message").click();
 
-		cy.wait("@contactRequest")
-			.its("request.body")
-			.should("include", {
-				name: "Cypress User",
-				email: "cypress@example.com",
-				message: "Great site!"
-			});
-		cy.get(".form-response")
-			.should("be.visible")
-			.and("contain", "Message sent");
+		cy.wait("@contactRequest").its("request.body").should("include", {
+			name: "Cypress User",
+			email: "cypress@example.com",
+			message: "Great site!"
+		});
+		cy.get(".form-response").should("be.visible").and("contain", "Message sent");
 		cy.get("#name").should("have.value", "");
 		cy.get("#email").should("have.value", "");
 		cy.get("#message").should("have.value", "");

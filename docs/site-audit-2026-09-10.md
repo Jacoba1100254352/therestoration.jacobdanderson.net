@@ -29,7 +29,7 @@ Verified using Node 24.18.1 and npm 12.0.2:
 - Root `npm ci` succeeds; manifest and lockfile versions are `4.0.2`.
 - Lint, both workspace typechecks, both builds, native Linux ARM64 lockfile checks, deployment-asset checks, and generated-site checks pass.
 - 35 automated unit/API/repository checks: 16 front-end, 17 back-end, and 2 deployment configuration tests.
-- 14 Cypress browser tests pass against the compiled Express server in Chrome.
+- 14 Cypress browser tests pass against the compiled Express server in Chrome. Tests wait for Vue to mount before interacting with prerendered HTML; the contact recovery test also delays its route script to exercise startup timing.
 - 28 axe scenarios pass: seven routes, desktop/mobile, light/dark preferences. The mobile scenarios also exercise Enter, Space, Tab, and Escape; the home scenarios exercise the skip link. No horizontal overflow, uncaught browser errors, or failed local asset requests were observed.
 - `npm audit` reports zero vulnerabilities across production and development dependencies. Registry verification covers 918 package signatures and 277 attestations.
 - `actionlint` passes for the changed CI workflow.
