@@ -34,6 +34,14 @@ function expectedLibc(packageName) {
 	return undefined;
 }
 
+function findResolvedPackage(packageName, version) {
+	return Object.entries(packages).find(([packagePath, metadata]) => {
+		const matchesName = packagePath === `node_modules/${packageName}`
+			|| packagePath.endsWith(`/node_modules/${packageName}`);
+		return matchesName && metadata.version === version;
+	});
+}
+
 assert(lockfile.lockfileVersion === 3, "package-lock.json must use lockfile v3");
 assert(frontendLockEntry, "package-lock.json must contain the front-end workspace importer");
 
@@ -50,7 +58,7 @@ for (const family of directBindingFamilies) {
 			`package-lock.json must pin the front-end optional dependency ${packageName}@${parentVersion}`
 		);
 		assert(
-			packages[`node_modules/${packageName}`]?.version === parentVersion,
+			findResolvedPackage(packageName, parentVersion),
 			`package-lock.json must resolve ${packageName}@${parentVersion}`
 		);
 	}
@@ -58,39 +66,40 @@ for (const family of directBindingFamilies) {
 
 const requiredBindings = [];
 for (const [parentPath, parentMetadata] of Object.entries(packages)) {
-	for (const packageName of Object.keys(parentMetadata.optionalDependencies || {})) {
+	for (const [packageName, declaredVersion] of Object.entries(parentMetadata.optionalDependencies || {})) {
 		if (!nativeBindingPattern.test(packageName)) continue;
-		const nodeModulesIndex = parentPath.lastIndexOf("node_modules/");
-		if (nodeModulesIndex < 0) continue;
-		const dependencyRoot = parentPath.slice(0, nodeModulesIndex + "node_modules/".length);
 		requiredBindings.push({
-			path: `${dependencyRoot}${packageName}`,
+			parentPath,
 			packageName,
-			version: parentMetadata.version
+			version: declaredVersion
 		});
 	}
 }
 
 assert(requiredBindings.length > 0, "The lockfile does not declare any Linux ARM64 native bindings");
 for (const required of requiredBindings) {
-	const binding = packages[required.path];
-	assert(binding, `Missing deploy-native lock entry: ${required.path}`);
+	const resolved = findResolvedPackage(required.packageName, required.version);
+	assert(
+		resolved,
+		`Missing deploy-native lock entry: ${required.packageName}@${required.version} required by ${required.parentPath}`
+	);
+	const [resolvedPath, binding] = resolved;
 	assert(
 		binding.version === required.version,
-		`${required.path} must match its parent package at ${required.version}`
+		`${resolvedPath} must match its parent package at ${required.version}`
 	);
-	assert(binding.optional === true, `${required.path} must remain optional`);
-	assert(binding.cpu?.includes("arm64"), `${required.path} must target arm64`);
-	assert(binding.os?.includes("linux"), `${required.path} must target Linux`);
+	assert(binding.optional === true, `${resolvedPath} must remain optional`);
+	assert(binding.cpu?.includes("arm64"), `${resolvedPath} must target arm64`);
+	assert(binding.os?.includes("linux"), `${resolvedPath} must target Linux`);
 	const libc = expectedLibc(required.packageName);
-	if (libc) assert(binding.libc?.includes(libc), `${required.path} must target ${libc}`);
+	if (libc) assert(binding.libc?.includes(libc), `${resolvedPath} must target ${libc}`);
 	assert(
 		typeof binding.integrity === "string" && binding.integrity.startsWith("sha512-"),
-		`${required.path} must include registry integrity metadata`
+		`${resolvedPath} must include registry integrity metadata`
 	);
 	assert(
 		typeof binding.resolved === "string" && binding.resolved.startsWith("https://registry.npmjs.org/"),
-		`${required.path} must resolve from the npm registry over HTTPS`
+		`${resolvedPath} must resolve from the npm registry over HTTPS`
 	);
 }
 
