@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import process from "node:process";
+import { verifyFrontend } from "./verify-frontend.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const marker = JSON.parse(
@@ -145,6 +146,7 @@ try {
 	assert.doesNotMatch(csp, /'unsafe-eval'/u);
 	assert.equal(home.headers.get("x-content-type-options"), "nosniff");
 	assert.equal(home.headers.get("x-frame-options"), "DENY");
+	await verifyFrontend(baseUrl);
 
 	const crossSite = await requestJson(baseUrl, "/api/contact", {
 		body: "{}",

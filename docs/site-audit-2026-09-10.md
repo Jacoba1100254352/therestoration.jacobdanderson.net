@@ -28,11 +28,12 @@ Verified using Node 24.18.1 and npm 12.0.2:
 
 - Root `npm ci` succeeds; manifest and lockfile versions are `4.0.2`.
 - Lint, both workspace typechecks, both builds, native Linux ARM64 lockfile checks, deployment-asset checks, and generated-site checks pass.
-- 35 automated unit/API/repository checks: 16 front-end, 17 back-end, and 2 deployment configuration tests.
+- 37 automated unit/API/repository checks: 16 front-end, 18 back-end, and 3 deployment checks, including promotion acceptance against actual healthy/unavailable API responses.
 - 14 Cypress browser tests pass against the compiled Express server in Chrome. Tests wait for Vue to mount before interacting with prerendered HTML; the contact recovery test also delays its route script to exercise startup timing.
 - 28 axe scenarios pass: seven routes, desktop/mobile, light/dark preferences. The mobile scenarios also exercise Enter, Space, Tab, and Escape; the home scenarios exercise the skip link. No horizontal overflow, uncaught browser errors, or failed local asset requests were observed.
 - `npm audit` reports zero vulnerabilities across production and development dependencies. Registry verification covers 918 package signatures and 277 attestations.
 - `actionlint` passes for the changed CI workflow.
+- Bash syntax and ShellCheck pass for the updated promotion script.
 
 The optional guarded Oxlint, zizmor, and OSV wrappers declined to run because installed versions differ from their approved versions. Those checks are not counted as passes. The repository's ESLint, native validation, npm audit/signature checks, and browser checks provide the recorded evidence.
 
@@ -40,11 +41,19 @@ Dependency freshness was reviewed for the root and both workspaces. This release
 
 ## Release and rollout
 
-This is the `v4.0.2` visitor reliability and search-metadata milestone, following `v4.0.1` monitoring work. Deploy the matching front-end and back-end builds together because the server now requires the generated `404.html` fallback. No environment or data migration is required. The existing direct-runtime preparation and promotion checks remain authoritative for deployment.
+This is the `v4.0.2` visitor reliability and search-metadata milestone, following `v4.0.1` monitoring work. Deploy the matching front-end and back-end builds together, including the generated `404.html` page. No environment or data migration is required. The existing direct-runtime preparation and promotion checks remain authoritative for deployment.
 
 Before publishing this release, the public `/healthz` and `/readyz` probes returned HTTP 200, and `/release.json` identified `v4.0.1` at `91366665ab34eb158024d4730f3651eed31f64f6`. Source publication and production promotion are separate steps.
 
 The browser tests isolate third-party tiles and analytics and intercept contact submissions. They do not establish live SMTP delivery, external analytics availability, map-tile availability, or production promotion. Manual VoiceOver/NVDA review remains useful alongside the automated accessibility checks.
+
+## Live deployment mismatch discovered during acceptance
+
+After publication, `/release.json` reported `v4.0.2` at `781193496e02e08a982c0293fdc2ca3e5990fccc`, but public HTML still contained the old menu and empty mask-icon link. The sitemap still listed localhost URLs with an August 2 build date. An unknown page returned HTTP 500 because the generated 404 file was unavailable. Release identity alone was therefore insufficient evidence of a complete deployment.
+
+The follow-up preserves a usable HTML 404 when that file is missing, strengthens public/direct-runtime checks to inspect the served front end, and makes the standard promotion script compare served HTML with the prepared candidate over IPv4 and IPv6. It also fixes the promotion script's obsolete expectation of detailed health/readiness fields: those endpoints deliberately return only `{ "ok": true }`, with identity checked separately. The environment example uses the documented loopback listener.
+
+Existing server-side routing, static-root selection, and build configuration require inspection by the server operator; authenticated server access was unavailable from this task. The [server recovery handoff](server-recovery-2026-09-10.md) gives the required investigation and acceptance steps. No real contact messages were sent during the audit.
 
 ## Reference guidance
 

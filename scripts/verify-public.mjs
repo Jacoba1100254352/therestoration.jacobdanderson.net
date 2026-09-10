@@ -1,4 +1,5 @@
 import process from "node:process";
+import { verifyFrontend } from "./verify-frontend.mjs";
 
 const baseUrl = new URL(
 	process.env.VERIFY_RESTORATION_BASE_URL || "https://therestoration.jacobdanderson.net"
@@ -85,6 +86,8 @@ for (const path of ["/healthz", "/readyz"]) {
 	const head = await request(path, { method: "HEAD" });
 	assert(head.response.status === 200 && head.text === "", `${path} HEAD must be bodyless`);
 }
+
+await verifyFrontend(baseUrl);
 
 const blockedWrite = await request("/api/contact", {
 	body: JSON.stringify({

@@ -13,6 +13,11 @@ ready_url="${READY_URL:-http://127.0.0.1:3007/readyz}"
 public_origin="${PUBLIC_ORIGIN:-https://therestoration.jacobdanderson.net}"
 resolve_ipv4="${RESTORATION_RESOLVE_IPV4:-therestoration.jacobdanderson.net:443:127.0.0.1}"
 resolve_ipv6="${RESTORATION_RESOLVE_IPV6:-therestoration.jacobdanderson.net:443:[::1]}"
+probe_verifier="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd -P)/verify-probes.mjs"
+if [[ ! -f "$probe_verifier" ]]; then
+	echo "The release must include the health/readiness verifier." >&2
+	exit 1
+fi
 
 if [[ $# -ne 1 ]]; then
 	echo "Usage: promote-release.sh /srv/therestoration/releases/<prepared-release>" >&2
@@ -82,9 +87,13 @@ response_ready="$(mktemp)"
 response_release="$(mktemp)"
 headers_ipv4="$(mktemp)"
 headers_ipv6="$(mktemp)"
+page_ipv4="$(mktemp)"
+page_ipv6="$(mktemp)"
+# Invoked by the EXIT trap, including failed promotion paths.
+# shellcheck disable=SC2329
 cleanup() {
 	if [[ -L "$next_link" ]]; then unlink -- "$next_link"; fi
-	rm -f -- "$release_env_temp" "$response_health" "$response_ready" "$response_release" "$headers_ipv4" "$headers_ipv6"
+	rm -f -- "$release_env_temp" "$response_health" "$response_ready" "$response_release" "$headers_ipv4" "$headers_ipv6" "$page_ipv4" "$page_ipv6"
 }
 trap cleanup EXIT
 
@@ -96,6 +105,8 @@ activate_target() {
 
 write_release_environment() {
 	local target="$1"
+	# Template interpolation belongs to Node, not the shell.
+	# shellcheck disable=SC2016
 	/usr/bin/node -e '
 const fs = require("node:fs")
 const release = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
@@ -115,30 +126,6 @@ const fs = require("node:fs")
 const expected = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
 const actual = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
 if (expected.release !== actual.release || expected.commitSha !== actual.commitSha || expected.deployedAt !== actual.deployedAt) process.exit(1)
-' "$expected" "$actual"
-}
-
-health_identity_matches() {
-	local expected="$1"
-	local actual="$2"
-	/usr/bin/node -e '
-const fs = require("node:fs")
-const expected = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
-const body = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
-const actual = body.deployment
-if (!body.ok || !actual || expected.release !== actual.release || expected.commitSha !== actual.commitSha || expected.deployedAt !== actual.deployedAt) process.exit(1)
-' "$expected" "$actual"
-}
-
-ready_identity_matches() {
-	local expected="$1"
-	local actual="$2"
-	/usr/bin/node -e '
-const fs = require("node:fs")
-const expected = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
-const body = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
-const actual = body.deployment
-if (!body.ready || !body.components?.contactMail?.ok || !actual || expected.release !== actual.release || expected.commitSha !== actual.commitSha || expected.deployedAt !== actual.deployedAt) process.exit(1)
 ' "$expected" "$actual"
 }
 
@@ -162,12 +149,11 @@ edge_status() {
 wait_for_target() {
 	local target="$1"
 	local marker="$target/.restoration-release-prepared.json"
-	local attempt
-	for attempt in {1..40}; do
+	local _attempt
+	for _attempt in {1..40}; do
 		if curl --noproxy '*' --fail --silent --show-error --max-time 5 "$health_url" --output "$response_health" \
-			&& health_identity_matches "$marker" "$response_health" \
 			&& curl --noproxy '*' --fail --silent --show-error --max-time 5 "$ready_url" --output "$response_ready" \
-			&& ready_identity_matches "$marker" "$response_ready" \
+			&& /usr/bin/node "$probe_verifier" "$response_health" "$response_ready" \
 			&& curl --noproxy '*' --ipv4 --fail --silent --show-error --max-time 5 --resolve "$resolve_ipv4" \
 				"$public_origin/release.json" --output "$response_release" \
 			&& identity_matches "$marker" "$response_release" \
@@ -175,9 +161,11 @@ wait_for_target() {
 				"$public_origin/release.json" --output "$response_release" \
 			&& identity_matches "$marker" "$response_release" \
 			&& curl --noproxy '*' --ipv4 --fail --silent --show-error --max-time 5 --resolve "$resolve_ipv4" \
-				--dump-header "$headers_ipv4" "$public_origin/" --output /dev/null \
+				--dump-header "$headers_ipv4" "$public_origin/" --output "$page_ipv4" \
 			&& curl --noproxy '*' --ipv6 --fail --silent --show-error --max-time 5 --resolve "$resolve_ipv6" \
-				--dump-header "$headers_ipv6" "$public_origin/" --output /dev/null \
+				--dump-header "$headers_ipv6" "$public_origin/" --output "$page_ipv6" \
+			&& cmp -s "$target/front-end/dist/index.html" "$page_ipv4" \
+			&& cmp -s "$target/front-end/dist/index.html" "$page_ipv6" \
 			&& strict_page_headers "$headers_ipv4" \
 			&& strict_page_headers "$headers_ipv6" \
 			&& [[ "$(edge_status --ipv4 "$resolve_ipv4" "$public_origin/api/contact" \

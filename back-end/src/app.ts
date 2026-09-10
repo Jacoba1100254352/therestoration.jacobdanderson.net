@@ -217,6 +217,12 @@ export function createApp(options: AppOptions = {}) {
 
 			res.set("Cache-Control", "public, max-age=0, must-revalidate");
 			res.status(404).sendFile("404.html", { root: staticRoot }, (error) => {
+				if (error && !res.headersSent && safeErrorCode(error) === "ENOENT") {
+					res.status(404).type("html").send(
+						"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Page not found | The Restoration</title></head><body><main><h1>Page not found</h1><p>The page may have moved or the address may be incorrect.</p><a href=\"/\">Return home</a></main></body></html>"
+					);
+					return;
+				}
 				if (error) next(error);
 			});
 		});

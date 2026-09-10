@@ -173,6 +173,19 @@ describe("the Restoration application", () => {
 		await request(app).post("/accounts/admin").send({ role: "admin" }).expect(404);
 	});
 
+	it("keeps missing pages usable when a deployment lacks the generated 404 file", async () => {
+		const staticRoot = await mkdtemp(join(tmpdir(), "restoration-old-static-"));
+		temporaryDirectories.push(staticRoot);
+		await writeFile(join(staticRoot, "index.html"), "<!doctype html><title>Older front end</title>");
+		const app = createApp({ staticRoot });
+		const response = await request(app).get("/missing-page").set("Accept", "text/html").expect(404);
+		expect(response.text).toContain("Page not found");
+		expect(response.text).toContain("href=\"/\"");
+		expect(response.text).toContain("noindex,nofollow");
+		const head = await request(app).head("/missing-page").set("Accept", "text/html").expect(404);
+		expect(head.text).toBeUndefined();
+	});
+
 	it("serves real pages and returns honest HTML or JSON 404 responses", async () => {
 		const staticRoot = await mkdtemp(join(tmpdir(), "restoration-static-"));
 		temporaryDirectories.push(staticRoot);

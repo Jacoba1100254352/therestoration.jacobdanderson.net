@@ -24,8 +24,9 @@ Compose, and Nginx is the only public listener.
    accessibility and browser checks, and a direct runtime smoke test.
 4. Run `sudo deploy/systemd/promote-release.sh <candidate>`. Promotion writes only the non-secret release identity to
    `/etc/therestoration/release.env`, selects the candidate atomically, restarts the service, reloads Nginx, and verifies
-   SMTP readiness, exact release identity, strict response headers, cross-site denial, and reserved-route denial over
-   both local IPv4 and IPv6 TLS paths.
+   SMTP configuration readiness, exact release identity, matching front-end HTML, strict response headers, cross-site
+   denial, and reserved-route denial over both local IPv4 and IPv6 TLS paths. Health/readiness use the minimal
+   `{ "ok": true }` payload; release identity is verified independently through `/release.json`.
 5. If any gate fails, the previous prepared direct release and its release identity are restored automatically. To
    roll back intentionally, promote a prior prepared release directory.
 6. From an external network, verify the exact public release:
@@ -39,3 +40,8 @@ Compose, and Nginx is the only public listener.
 This deployment does not modify DNS, certificates, routing, or firewall policy. Preserve both address families and
 every existing A and AAAA record; A or AAAA records are not troubleshooting controls. If one family fails, repair the
 host listener, certificate coverage, route, or firewall separately without changing DNS.
+
+The `verify:public` check validates the served front-end metadata, navigation, sitemap, and 404 behavior as well as the
+backend identity. A matching `/release.json` alone does not prove that the front-end build was promoted. Check service
+`STATIC_ROOT` overrides and competing Nginx static locations when the backend is current but public pages are stale.
+The [September 2026 recovery handoff](../docs/server-recovery-2026-09-10.md) records the observed mismatch and acceptance criteria.
