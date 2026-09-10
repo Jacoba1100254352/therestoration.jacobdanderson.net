@@ -1,8 +1,9 @@
 <script lang="ts" setup>
-import { ref } from "vue";
+import { ref, watch } from "vue";
 
 const isExpanded = ref(false);
-const activeLink = ref("Home");
+const menuButton = ref<HTMLButtonElement | null>(null);
+const route = useRoute();
 
 const links = ref([
 	{ name: "Home", path: "/" },
@@ -17,34 +18,46 @@ function toggleMenu() {
 	isExpanded.value = !isExpanded.value;
 }
 
-function setActiveLink(linkName: string) {
-	activeLink.value = linkName;
-	isExpanded.value = false; // Optionally close the menu upon selection
+function closeMenu(event: KeyboardEvent) {
+	if (!isExpanded.value) return;
+	event.preventDefault();
+	isExpanded.value = false;
+	menuButton.value?.focus();
 }
+
+watch(
+	() => route.fullPath,
+	() => {
+		isExpanded.value = false;
+	}
+);
 </script>
 
 <template>
 	<header>
-		<nav class="flex-container">
+		<nav class="flex-container" aria-label="Main navigation" @keydown.esc="closeMenu">
 			<div class="logo-container">
 				<RouterLink to="/" aria-label="The Restoration home">
 					<img alt="" class="logo" src="/images/restoration/brand/mormon-book-440px.jpg" />
 				</RouterLink>
 				<span class="site-name">The Restoration</span>
 			</div>
-			<div class="hamburger" @click="toggleMenu">
-				<div :class="{ open: isExpanded }" class="bar" />
-				<div :class="{ open: isExpanded }" class="bar" />
-				<div :class="{ open: isExpanded }" class="bar" />
-			</div>
-			<ul :class="{ expanded: isExpanded }" class="nav-links">
-				<li
-					v-for="link in links"
-					:key="link.path"
-					:class="{ active: activeLink === link.name }"
-					@click="setActiveLink(link.name)"
-				>
-					<RouterLink :to="link.path" class="nav-link">
+			<button
+				ref="menuButton"
+				type="button"
+				class="hamburger"
+				:aria-expanded="isExpanded"
+				aria-controls="main-navigation"
+				aria-label="Toggle navigation"
+				@click="toggleMenu"
+			>
+				<span :class="{ open: isExpanded }" class="bar" aria-hidden="true" />
+				<span :class="{ open: isExpanded }" class="bar" aria-hidden="true" />
+				<span :class="{ open: isExpanded }" class="bar" aria-hidden="true" />
+			</button>
+			<ul id="main-navigation" :class="{ expanded: isExpanded }" class="nav-links">
+				<li v-for="link in links" :key="link.path" :class="{ active: route.path === link.path }">
+					<RouterLink :to="link.path" class="nav-link" @click="isExpanded = false">
 						{{ link.name }}
 					</RouterLink>
 				</li>
@@ -62,6 +75,7 @@ function setActiveLink(linkName: string) {
 	background-color: #fff;
 	border-bottom: 1px solid #ccc;
 	position: relative;
+	z-index: 1100;
 }
 
 .logo-container {
@@ -104,6 +118,13 @@ function setActiveLink(linkName: string) {
 	display: none;
 	flex-direction: column;
 	cursor: pointer;
+	background: transparent;
+	border: 0;
+	padding: 5px;
+	min-width: 44px;
+	min-height: 44px;
+	align-items: center;
+	justify-content: center;
 }
 
 .bar {
@@ -137,8 +158,9 @@ function setActiveLink(linkName: string) {
 		width: 100%;
 		background-color: #fff;
 		position: absolute;
-		top: 60px;
+		top: 100%;
 		left: 0;
+		margin: 0;
 		padding: 20px;
 		border-top: 1px solid #ccc;
 		border-bottom: 1px solid #ccc;
@@ -151,6 +173,12 @@ function setActiveLink(linkName: string) {
 	.nav-links li {
 		margin: 10px 0;
 		text-align: center;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.bar {
+		transition: none;
 	}
 }
 </style>

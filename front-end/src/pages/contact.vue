@@ -13,6 +13,7 @@ const responseMessage = ref("");
 const responseTone = ref<"success" | "error">("success");
 
 async function handleSubmit() {
+	if (isSubmitting.value) return;
 	isSubmitting.value = true;
 	responseMessage.value = "";
 
@@ -28,10 +29,12 @@ async function handleSubmit() {
 		});
 		const payload = await response.json().catch(() => null);
 
-		if (!response.ok) {
+		if (!response.ok || payload?.ok !== true) {
 			responseTone.value = "error";
 			responseMessage.value =
-				payload?.error || "The message could not be sent right now. Please try again later.";
+				typeof payload?.error === "string" && payload.error.length <= 300
+					? payload.error
+					: "The message could not be sent right now. Please try again later.";
 			return;
 		}
 
@@ -42,9 +45,11 @@ async function handleSubmit() {
 		form.value.message = "";
 		form.value.website = "";
 	} catch (error) {
-		console.error("The Restoration contact form failed:", error);
 		responseTone.value = "error";
-		responseMessage.value = "The message could not be sent right now. Please try again later.";
+		responseMessage.value =
+			(error instanceof Error || error instanceof DOMException) && error.name === "TimeoutError"
+				? "Delivery could not be confirmed. Your message is still here. Please wait before trying again."
+				: "The message could not be sent right now. Please try again later.";
 	} finally {
 		isSubmitting.value = false;
 	}
@@ -57,20 +62,44 @@ async function handleSubmit() {
 		<div class="item">
 			<p>If you have any questions or feedback, please feel free to reach out to us through the form below.</p>
 
-			<form @submit.prevent="handleSubmit">
+			<form :aria-busy="isSubmitting" @submit.prevent="handleSubmit">
 				<div class="form-group">
 					<label for="name">Name:</label>
-					<input id="name" v-model="form.name" autocomplete="name" maxlength="120" required type="text" />
+					<input
+						id="name"
+						v-model="form.name"
+						:readonly="isSubmitting"
+						autocomplete="name"
+						maxlength="120"
+						required
+						type="text"
+					/>
 				</div>
 
 				<div class="form-group">
 					<label for="email">Email:</label>
-					<input id="email" v-model="form.email" required autocomplete="email" maxlength="320" type="email" />
+					<input
+						id="email"
+						v-model="form.email"
+						:readonly="isSubmitting"
+						required
+						autocomplete="email"
+						maxlength="320"
+						type="email"
+					/>
 				</div>
 
 				<div class="form-group">
 					<label for="message">Message:</label>
-					<textarea id="message" v-model="form.message" required minlength="10" maxlength="5000" rows="4" />
+					<textarea
+						id="message"
+						v-model="form.message"
+						:readonly="isSubmitting"
+						required
+						minlength="10"
+						maxlength="5000"
+						rows="4"
+					/>
 				</div>
 
 				<input
@@ -89,9 +118,9 @@ async function handleSubmit() {
 				</button>
 
 				<p
-					v-if="responseMessage"
 					class="form-response"
-					aria-live="polite"
+					role="status"
+					aria-atomic="true"
 					:class="responseTone === 'error' ? 'form-response--error' : 'form-response--success'"
 				>
 					{{ responseMessage }}
@@ -134,7 +163,7 @@ button[type="submit"]:hover {
 	background-color: #1b5e20;
 }
 
-.form-response {
+.form-response:not(:empty) {
 	margin-top: 12px;
 }
 

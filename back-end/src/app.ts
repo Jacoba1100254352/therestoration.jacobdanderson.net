@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from "express";
 import type { ContactSender } from "./contact.js";
 import type { DeploymentIdentity } from "./deployment.js";
+import { access } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import express from "express";
 import rateLimit from "express-rate-limit";
@@ -20,7 +21,7 @@ export interface AppOptions {
 const RESERVED_SERVER_PATHS = ["/accounts", "/admin", "/auth", "/login", "/session", "/users"];
 
 function isReservedServerPath(path: string) {
-	return path.startsWith("/api/")
+	return path === "/api" || path.startsWith("/api/")
 		|| path.startsWith("/_")
 		|| RESERVED_SERVER_PATHS.some(prefix => path === prefix || path.startsWith(`${prefix}/`));
 }
@@ -88,7 +89,7 @@ export function createApp(options: AppOptions = {}) {
 
 	app.use((req, res, next) => {
 		if (
-			req.path.startsWith("/api/")
+			req.path === "/api" || req.path.startsWith("/api/")
 			|| req.path === "/healthz"
 			|| req.path === "/readyz"
 			|| req.path === "/release.json"
@@ -173,6 +174,22 @@ export function createApp(options: AppOptions = {}) {
 
 	if (staticRoot) {
 		app.use(
+			async (req, res, next) => {
+				const page = /^\/([a-z0-9-]+)(?:\/|\.html)$/.exec(req.path)?.[1];
+				if ((req.method === "GET" || req.method === "HEAD") && page && page !== "404" && !isReservedServerPath(`/${page}`)) {
+					const exists = await access(resolve(staticRoot, `${page}.html`)).then(() => true, () => false);
+					if (exists) {
+						const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+						res.redirect(308, `${page === "index" ? "/" : `/${page}`}${query}`);
+						return;
+					}
+				}
+				next();
+			},
+			(req, res, next) => {
+				if (req.path === "/404" || req.path === "/404.html") res.status(404);
+				next();
+			},
 			express.static(staticRoot, {
 				extensions: ["html"],
 				index: "index.html",
@@ -189,7 +206,7 @@ export function createApp(options: AppOptions = {}) {
 
 		app.use((req, res, next) => {
 			if (
-				req.method !== "GET"
+				(req.method !== "GET" && req.method !== "HEAD")
 				|| isReservedServerPath(req.path)
 				|| extname(req.path)
 				|| !req.accepts("html")
@@ -199,7 +216,7 @@ export function createApp(options: AppOptions = {}) {
 			}
 
 			res.set("Cache-Control", "public, max-age=0, must-revalidate");
-			res.sendFile("index.html", { root: staticRoot }, (error) => {
+			res.status(404).sendFile("404.html", { root: staticRoot }, (error) => {
 				if (error) next(error);
 			});
 		});

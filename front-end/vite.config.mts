@@ -13,6 +13,7 @@ import Layouts from "vite-plugin-vue-layouts-next";
 import generateSitemap from "vite-ssg-sitemap";
 import { VueRouterAutoImports } from "vue-router/unplugin";
 import VueRouter from "vue-router/vite";
+import { siteUrl } from "./src/site.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -87,7 +88,7 @@ export default defineConfig(({ command }) => ({
 			reduceInlineStyles: false
 		},
 		onFinished() {
-			generateSitemap();
+			generateSitemap({ hostname: siteUrl, exclude: ["/404"], generateRobotsTxt: false });
 		}
 	},
 

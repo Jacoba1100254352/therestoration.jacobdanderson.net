@@ -6,7 +6,7 @@ import process from "node:process";
 const projectRoot = resolve(import.meta.dirname, "..");
 const frontendRoot = resolve(projectRoot, "front-end");
 const baseUrl = "http://127.0.0.1:3333";
-const viteCli = resolve(projectRoot, "node_modules/vite/bin/vite.js");
+const testServer = resolve(projectRoot, "scripts/serve-test-site.mjs");
 const cypressCli = resolve(projectRoot, "node_modules/cypress/bin/cypress");
 
 function waitForExit(child) {
@@ -19,7 +19,7 @@ async function waitForHttp(child, timeoutMs = 30_000) {
 	const startedAt = Date.now();
 	while (Date.now() - startedAt < timeoutMs) {
 		if (child.exitCode !== null || child.signalCode !== null) {
-			throw new Error("The Vite preview exited before it became ready.");
+			throw new Error("The production test server exited before it became ready.");
 		}
 		try {
 			const response = await fetch(baseUrl, { signal: AbortSignal.timeout(2_000) });
@@ -43,8 +43,8 @@ async function stop(child) {
 	if (!exited && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
 }
 
-const preview = spawn(process.execPath, [viteCli, "preview", "--host", "127.0.0.1", "--port", "3333", "--strictPort"], {
-	cwd: frontendRoot,
+const preview = spawn(process.execPath, [testServer], {
+	cwd: projectRoot,
 	env: { ...process.env, BROWSER: "none" },
 	stdio: ["ignore", "inherit", "inherit"]
 });
@@ -52,7 +52,7 @@ const preview = spawn(process.execPath, [viteCli, "preview", "--host", "127.0.0.
 let exitCode = 1;
 try {
 	await waitForHttp(preview);
-	const cypress = spawn(process.execPath, [cypressCli, "run"], {
+	const cypress = spawn(process.execPath, [cypressCli, "run", "--browser", "chrome"], {
 		cwd: frontendRoot,
 		env: { ...process.env, CYPRESS_BASE_URL: baseUrl },
 		stdio: "inherit"

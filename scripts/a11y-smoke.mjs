@@ -1,305 +1,115 @@
-import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import http from "node:http";
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
+// eslint-disable-next-line antfu/no-import-dist -- Test the compiled production server, not development middleware.
+import { createApp } from "../back-end/dist/app.js";
 
 const require = createRequire(import.meta.url);
 const axeSourcePath = require.resolve("axe-core/axe.min.js");
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(scriptDir, "..");
-const frontendPackagePath = resolve(projectRoot, "front-end/package.json");
-const frontendPackage = JSON.parse(readFileSync(frontendPackagePath, "utf8"));
-
-const siteName = "The Restoration";
-const frontendKind = "vite";
-const frontendPort = Number(process.env.A11Y_FRONTEND_PORT || 3355);
-const apiPort = Number(process.env.A11Y_API_PORT || 3055);
-const baseUrl = `http://127.0.0.1:${frontendPort}`;
-const apiUrl = `http://127.0.0.1:${apiPort}/api`;
-const routes = [
-	"/",
-	"/about",
-	"/events",
-	"/figures",
-	"/map",
-	"/contact"
-];
-const colorSchemes = (process.env.A11Y_COLOR_SCHEMES || "light,dark")
-	.split(",")
-	.map(scheme => scheme.trim())
-	.filter(Boolean);
-
-const chromeCandidates = [
+const routes = ["/", "/about", "/events", "/figures", "/map", "/contact", "/missing-page"];
+const chromePath = [
 	process.env.PUPPETEER_EXECUTABLE_PATH,
 	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 	"/Applications/Chromium.app/Contents/MacOS/Chromium",
 	"/usr/bin/google-chrome-stable",
 	"/usr/bin/google-chrome",
-	"/usr/bin/chromium-browser",
 	"/usr/bin/chromium"
-].filter(Boolean);
-
-const chromePath = chromeCandidates.find(candidate => existsSync(candidate));
-if (chromePath) process.env.PUPPETEER_EXECUTABLE_PATH = chromePath;
-
-function writeServerLine(prefix, data) {
-	const text = data.toString().trim();
-	if (text) process.stderr.write(`[${prefix}] ${text}\n`);
-}
-
-function sendJson(res, body, status = 200) {
-	res.writeHead(status, {
-		"content-type": "application/json",
-		"access-control-allow-origin": baseUrl,
-		"access-control-allow-credentials": "true",
-		"access-control-allow-headers": "authorization,content-type",
-		"access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-	});
-	res.end(JSON.stringify(body));
-}
-
-function emptyCollection() {
-	return {
-		items: [],
-		results: [],
-		data: [],
-		records: [],
-		total: 0
-	};
-}
-
-function responseFor(url) {
-	const pathname = url.pathname.replace(/\/+/g, "/");
-	if (pathname.endsWith("/pageview")) return { pageview: 0, startAt: Date.now() };
-	if (pathname.includes("/session")) return { authenticated: false, user: null, admin: null };
-	if (pathname.includes("/auth") || pathname.includes("/login")) return { authenticated: false, user: null, token: "" };
-	if (pathname.includes("/me") || pathname.includes("/account")) return { user: null, authenticated: false };
-	if (pathname.includes("/quotes")) return [];
-	if (pathname.includes("/availability")) {
-		const start = new Date(Date.now() + 24 * 60 * 60_000);
-		start.setMinutes(0, 0, 0);
-		const end = new Date(start.getTime() + 60 * 60_000);
-		return [{ id: "a11y-slot", title: "Available", start: start.toISOString(), end: end.toISOString() }];
-	}
-	if (pathname.includes("/topics")) return { topics: [], claims: [], ...emptyCollection() };
-	if (pathname.includes("/claims")) return { claims: [], ...emptyCollection() };
-	if (pathname.includes("/search")) return { query: url.searchParams.get("q") || "", ...emptyCollection() };
-	if (pathname.includes("/submissions") || pathname.includes("/board") || pathname.includes("/items")) return emptyCollection();
-	if (pathname.includes("/service-directory")) return { services: [], categories: [], ...emptyCollection() };
-	if (pathname.includes("/elections")) return { elections: [], ...emptyCollection() };
-	if (pathname.includes("/jurisdictions") || pathname.includes("/locations") || pathname.includes("/districts")) return { jurisdictions: [], locations: [], districts: [], ...emptyCollection() };
-	if (pathname.includes("/representatives") || pathname.includes("/candidate")) return { representatives: [], candidates: [], ...emptyCollection() };
-	if (pathname.includes("/sources")) return { sources: [], ...emptyCollection() };
-	if (pathname.includes("/products")) return [];
-	if (pathname.includes("/contact") || pathname.includes("/cart") || pathname.includes("/orders")) return { ok: true };
-	return { ok: true, ...emptyCollection() };
-}
-
-function createMockApiServer() {
-	return http.createServer((req, res) => {
-		const url = new URL(req.url || "/", `http://127.0.0.1:${apiPort}`);
-		if (req.method === "OPTIONS") {
-			sendJson(res, {}, 204);
-			return;
-		}
-		sendJson(res, responseFor(url));
-	});
-}
-
-async function listen(server, port) {
-	await new Promise((resolveListen, reject) => {
-		server.once("error", reject);
-		server.listen(port, "127.0.0.1", resolveListen);
-	});
-}
-
-async function waitForHttp(url, timeoutMs = 45_000) {
-	const start = Date.now();
-	let lastError;
-	while (Date.now() - start < timeoutMs) {
-		try {
-			const response = await fetch(url);
-			if (response.ok) return;
-			lastError = new Error(`${url} returned ${response.status}`);
-		}
-		catch (error) {
-			lastError = error;
-		}
-		await new Promise(resolveWait => setTimeout(resolveWait, 400));
-	}
-	throw lastError || new Error(`Timed out waiting for ${url}`);
-}
-
-function startFrontend() {
-	const isNuxt = frontendKind === "nuxt" || Object.values(frontendPackage.scripts || {}).some(script => String(script).includes("nuxt"));
-	const args = isNuxt
-		? ["exec", "-w", "front-end", "--", "nuxt", "dev", "--host", "127.0.0.1", "--port", String(frontendPort)]
-		: ["exec", "-w", "front-end", "--", "vite", "--host", "127.0.0.1", "--port", String(frontendPort), "--strictPort"];
-
-	const child = spawn("npm", args, {
-		cwd: projectRoot,
-		env: {
-			...process.env,
-			BROWSER: "none",
-			DISABLE_ANALYTICS: "true",
-			NUXT_DEVTOOLS_ENABLED: "false",
-			NUXT_TELEMETRY_DISABLED: "1",
-			NUXT_PUBLIC_APP_URL: baseUrl,
-			NUXT_PUBLIC_SITE_URL: baseUrl,
-			NUXT_PUBLIC_API_BASE: apiUrl,
-			NUXT_PUBLIC_API_BASE_URL: apiUrl,
-			PUBLIC_API_BASE: apiUrl,
-			INTERNAL_API_BASE: apiUrl,
-			API_INTERNAL_BASE: apiUrl,
-			ADMIN_API_BASE: apiUrl,
-			NUXT_ADMIN_API_BASE: apiUrl,
-			ADMIN_API_KEY: "a11y-smoke",
-			NUXT_ADMIN_API_KEY: "a11y-smoke",
-			ADMIN_SESSION_SECRET: "a11y-smoke-session-secret",
-			NUXT_ADMIN_SESSION_SECRET: "a11y-smoke-session-secret",
-			NUXT_SESSION_SIGNING_SECRET: "a11y-smoke-session-secret",
-			SESSION_SIGNING_SECRET: "a11y-smoke-session-secret",
-			NUXT_PUBLIC_BACKEND_MODE: "mock",
-			NUXT_PUBLIC_BILLING_MODE: "mock",
-			NUXT_PUBLIC_ENABLE_DEMO_ACCESS: "true",
-			NUXT_PUBLIC_FEATURE_INVESTMENT_MODULE: "true",
-			NUXT_PUBLIC_PORTAL_URL: baseUrl,
-			VITE_API_BASE_URL: apiUrl,
-			VITE_API_URL: apiUrl,
-			VITE_SSG_API_BASE_URL: apiUrl,
-			VITE_PUBLIC_SITE_ORIGIN: baseUrl,
-			VITE_SHOW_AD_SLOTS: "false"
-		},
-		detached: process.platform !== "win32",
-		stdio: ["ignore", "pipe", "pipe"]
-	});
-	child.stdout.on("data", data => writeServerLine(isNuxt ? "nuxt" : "vite", data));
-	child.stderr.on("data", data => writeServerLine(isNuxt ? "nuxt" : "vite", data));
-	return child;
-}
-
-function closeServer(server) {
-	return new Promise(resolveClose => server.close(resolveClose));
-}
-
-function processIsRunning(child) {
-	return child.exitCode === null && child.signalCode === null;
-}
-
-function waitForProcessExit(child, timeoutMs) {
-	if (!processIsRunning(child)) return Promise.resolve(true);
-
-	return new Promise((resolveWait) => {
-		let timeout;
-		const onExit = () => {
-			clearTimeout(timeout);
-			resolveWait(true);
-		};
-		timeout = setTimeout(() => {
-			child.off("exit", onExit);
-			resolveWait(false);
-		}, timeoutMs);
-		child.once("exit", onExit);
-	});
-}
-
-async function stopProcessTree(child) {
-	if (!child.pid || !processIsRunning(child)) return;
-
-	const target = process.platform === "win32" ? child.pid : -child.pid;
-	try {
-		process.kill(target, "SIGTERM");
-	}
-	catch (error) {
-		if (error?.code !== "ESRCH") console.warn(`Could not stop frontend process: ${error.message}`);
-		return;
-	}
-
-	if (await waitForProcessExit(child, 5_000)) return;
-
-	try {
-		process.kill(target, "SIGKILL");
-	}
-	catch (error) {
-		if (error?.code !== "ESRCH") console.warn(`Could not force stop frontend process: ${error.message}`);
-	}
-	await waitForProcessExit(child, 2_000);
-}
-
-async function analyzePage(browser, route, scheme) {
-	const url = `${baseUrl}${route}`;
-	const page = await browser.newPage();
-	page.setDefaultTimeout(30_000);
-	await page.setViewport({ width: 1280, height: 1000, deviceScaleFactor: 1 });
-	if (scheme === "dark" || scheme === "light") {
-		await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: scheme }]);
-	}
-	await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-	await page.waitForNetworkIdle({ idleTime: 500, timeout: 8_000 }).catch(() => {});
-	await page.addScriptTag({ path: axeSourcePath });
-	const result = await page.evaluate(async () => {
-		return await globalThis.axe.run(document, {
-			resultTypes: ["violations"],
-			runOnly: {
-				type: "tag",
-				values: ["wcag2a", "wcag2aa"]
-			}
-		});
-	});
-	await page.close();
-	return {
-		url,
-		scheme,
-		violations: result.violations.filter(violation => violation.id !== "frame-tested")
-	};
-}
-
-const apiServer = createMockApiServer();
-const frontendProcess = startFrontend();
+].find(candidate => candidate && existsSync(candidate));
+const app = createApp({ staticRoot: resolve(import.meta.dirname, "../front-end/dist") });
+const server = app.listen(0, "127.0.0.1");
+await new Promise((resolveListen, reject) => {
+	server.once("listening", resolveListen);
+	server.once("error", reject);
+});
+const baseUrl = `http://127.0.0.1:${server.address().port}`;
 let browser;
+const failures = [];
+
+async function checkAccessibility(page, label) {
+	const violations = await page.evaluate(async () => {
+		const result = await globalThis.axe.run(document, {
+			resultTypes: ["violations"],
+			runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] }
+		});
+		return result.violations.map(({ id, help, nodes }) => ({ id, help, targets: nodes.map(node => node.target) }));
+	});
+	assert.deepEqual(violations, [], `${label}: ${JSON.stringify(violations)}`);
+	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label}: horizontal overflow`);
+}
 
 try {
-	await listen(apiServer, apiPort);
-	await waitForHttp(baseUrl);
-
-	browser = await puppeteer.launch({
-		executablePath: chromePath,
-		headless: "new",
-		args: ["--no-sandbox", "--disable-dev-shm-usage"]
-	});
-
-	const failures = [];
-	for (const route of routes) {
-		for (const scheme of colorSchemes) {
-			const result = await analyzePage(browser, route, scheme);
-			if (result.violations.length) {
-				failures.push(result);
-				continue;
-			}
-			console.log(`a11y ok: ${result.url} [${scheme}]`);
-		}
-	}
-
-	if (failures.length) {
-		for (const failure of failures) {
-			console.error(`\nAccessibility issues for ${siteName} at ${failure.url} [${failure.scheme}]`);
-			for (const violation of failure.violations) {
-				console.error(`- [${violation.impact ?? "unknown"}] ${violation.id}: ${violation.help}`);
-				console.error(`  ${violation.helpUrl}`);
-				for (const node of violation.nodes) {
-					console.error(`  ${node.target.join(", ")}`);
+	browser = await puppeteer.launch({ executablePath: chromePath, headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+	for (const width of [1280, 390]) {
+		for (const scheme of ["light", "dark"]) {
+			for (const route of routes) {
+				const label = `${route} ${width}px ${scheme}`;
+				const page = await browser.newPage();
+				const errors = [];
+				page.on("pageerror", error => errors.push(error.message));
+				page.on("response", (response) => {
+					if (response.url().startsWith(baseUrl) && !response.request().isNavigationRequest() && response.status() >= 400) {
+						errors.push(`${response.status()} ${response.url()}`);
+					}
+				});
+				try {
+					await page.setCacheEnabled(false);
+					await page.setViewport({ width, height: 900 });
+					await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: scheme }, { name: "prefers-reduced-motion", value: "reduce" }]);
+					await page.setRequestInterception(true);
+					page.on("request", (request) => {
+						// Keep analytics and map tiles deterministic without sending visitor traffic.
+						if (/^https?:/u.test(request.url()) && !request.url().startsWith(baseUrl)) {
+							void request.respond({ status: 204 });
+						}
+						else { void request.continue(); }
+					});
+					const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle0" });
+					assert.equal(response.status(), route === "/missing-page" ? 404 : 200, label);
+					await page.waitForSelector("h1");
+					if (route === "/map") await page.waitForSelector(".leaflet-marker-icon");
+					await page.addScriptTag({ path: axeSourcePath });
+					await checkAccessibility(page, label);
+					if (width === 390 && route !== "/missing-page") {
+						await page.focus(".hamburger");
+						await page.keyboard.press("Enter");
+						await page.waitForSelector(".hamburger[aria-expanded=\"true\"]");
+						await checkAccessibility(page, `${label} menu open`);
+						await page.keyboard.press("Tab");
+						assert.ok(await page.evaluate(() => !!document.activeElement?.closest("#main-navigation")), `${label}: keyboard cannot reach navigation`);
+						await page.keyboard.press("Escape");
+						assert.ok(await page.$eval(".hamburger", element => element === document.activeElement && element.getAttribute("aria-expanded") === "false"), `${label}: Escape must close menu and return focus`);
+						await page.keyboard.press("Space");
+						await page.waitForSelector(".hamburger[aria-expanded=\"true\"]");
+						await page.keyboard.press("Escape");
+					}
+					if (route === "/") {
+						await page.focus(".skip-link");
+						await page.keyboard.press("Enter");
+						assert.equal(await page.evaluate(() => document.activeElement?.id), "main-content", `${label}: skip link must move focus`);
+						await page.evaluate(() => {
+							document.activeElement?.blur();
+							window.scrollTo(0, 0);
+						});
+						if (scheme === "light" && process.env.AUDIT_SCREENSHOT_DIR) {
+							await mkdir(process.env.AUDIT_SCREENSHOT_DIR, { recursive: true });
+							await page.screenshot({ path: resolve(process.env.AUDIT_SCREENSHOT_DIR, `after-${width === 1280 ? "desktop" : "mobile"}.png`) });
+						}
+					}
+					assert.deepEqual(errors, [], `${label}: browser or local resource errors`);
+					console.log(`a11y ok: ${label}`);
 				}
+				catch (error) { failures.push(`${label}: ${error.message}`); }
+				finally { await page.close(); }
 			}
 		}
-		process.exitCode = 1;
 	}
+	if (failures.length) throw new Error(failures.join("\n"));
 }
 finally {
-	if (browser) await browser.close();
-	await stopProcessTree(frontendProcess);
-	await closeServer(apiServer);
+	await browser?.close();
+	await new Promise(resolveClose => server.close(resolveClose));
 }

@@ -237,7 +237,7 @@ export const useMainStore = defineStore("main", {
 						events: ["Organization of the Church"],
 						figures: ["Joseph Smith", "Oliver Cowdery", "David Whitmer", "Martin Harris"],
 						imageUrl: "/images/restoration/map/organization-of-the-church.jpeg",
-						imgAtl: "Organization of the Church"
+						imgAlt: "Organization of the Church"
 					},
 					{
 						name: "Kirtland, Ohio",

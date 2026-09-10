@@ -1,6 +1,6 @@
 # Accessibility QA Checklist
 
-This checklist complements the automated `npm run a11y` axe smoke suite. Run it before shipping home, figures, events, map, contact, and informational changes.
+This checklist complements the automated `npm run a11y` axe smoke suite. Run `npm run build` first: the suite now serves the compiled Express app and generated pages, using desktop/mobile viewports and light/dark preferences. It also checks missing pages, local asset failures, menu keyboard operation, and skip-link focus. Run it before shipping home, figures, events, map, contact, and informational changes.
 
 ## Screen Reader Pass
 

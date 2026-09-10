@@ -5,7 +5,7 @@ import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 <template>
 	<footer>
 		<h2>Contact</h2>
-		<nav>
+		<nav aria-label="Social links">
 			<ul>
 				<li>
 					<a

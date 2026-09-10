@@ -15,6 +15,10 @@ updates:
       development-dependencies:
         dependency-type: development
     ignore:
+      # vite-ssg 28 uses Unhead 2. Upgrade both together after verifying generated head tags.
+      - dependency-name: "@unhead/vue"
+        update-types:
+          - version-update:semver-major
       # Keep editor/compiler types aligned with the Node 24 LTS and
       # TypeScript 6 production toolchain until those baselines move.
       - dependency-name: "@types/node"

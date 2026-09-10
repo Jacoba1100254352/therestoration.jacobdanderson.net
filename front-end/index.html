@@ -19,23 +19,21 @@
 	      sizes="16x16"
 	      type="image/png">
 	<!--  <link href="/site.webmanifest" rel="manifest">-->
-	<link color="#5bbad5" href="" rel="mask-icon">
 	
 	<meta content="#da532c" name="msapplication-TileColor" />
 	<meta content="#ffffff" name="theme-color" />
-	<meta
-		content="Explore key events, people, places, and sources from the Restoration."
-		name="description"
-	/>
-	<meta content="index,follow" name="robots" />
 	
 	<script>
 		(function () {
 			const prefersDark =
 				window.matchMedia &&
 				window.matchMedia("(prefers-color-scheme: dark)").matches;
-			const setting =
-				localStorage.getItem("vueuse-color-scheme") || "auto";
+			let setting = "auto";
+			try {
+				setting = localStorage.getItem("vueuse-color-scheme") || "auto";
+			} catch {
+				// Storage can be unavailable in private or restricted browsing.
+			}
 			if (setting === "dark" || (prefersDark && setting !== "light"))
 				document.documentElement.classList.toggle("dark", true);
 		})();

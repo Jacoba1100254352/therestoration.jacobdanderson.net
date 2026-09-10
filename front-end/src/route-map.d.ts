@@ -45,6 +45,13 @@ declare module 'vue-router/auto-routes' {
       { all: ParamValue<false> },
       | never
     >,
+    '/404': RouteRecordInfo<
+      '/404',
+      '/404',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/about': RouteRecordInfo<
       '/about',
       '/about',
@@ -80,13 +87,6 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
-    '/README': RouteRecordInfo<
-      '/README',
-      '/README',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
   }
 
   /**
@@ -115,6 +115,14 @@ declare module 'vue-router/auto-routes' {
         | never
       pathParamNames:
         | 'all'
+    }
+    'src/pages/404.vue': {
+      routes:
+        | '/404'
+      views:
+        | never
+      pathParamNames:
+        | never
     }
     'src/pages/about.vue': {
       routes:
@@ -151,14 +159,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/map.vue': {
       routes:
         | '/map'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
-    'src/pages/README.vue': {
-      routes:
-        | '/README'
       views:
         | never
       pathParamNames:

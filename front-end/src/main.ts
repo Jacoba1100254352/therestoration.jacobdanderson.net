@@ -20,7 +20,12 @@ export const createApp = ViteSSG(
 	App,
 	{
 		routes: setupLayouts([...routes]),
-		base: import.meta.env.BASE_URL
+		base: import.meta.env.BASE_URL,
+		scrollBehavior(to, _from, savedPosition) {
+			if (savedPosition) return savedPosition;
+			if (to.hash) return { el: to.hash };
+			return { top: 0 };
+		}
 	},
 	ctx => {
 		// ctx is the context where you can add global components or plugins

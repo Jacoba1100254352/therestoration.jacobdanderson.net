@@ -13,7 +13,7 @@ const home = computed(() => store.home);
 			<h1>{{ home.header.title }}</h1>
 		</div>
 
-		<nav class="featured-links">
+		<nav class="featured-links" aria-label="Explore the Restoration">
 			<!--      <RouterLink icon-btn to="/map" :title="t('button.map')" data-test-id="map">Interactive Map</RouterLink> -->
 			<RouterLink to="/map"> Interactive Map </RouterLink>
 			|
@@ -76,6 +76,10 @@ const home = computed(() => store.home);
 }
 
 @media (max-width: 768px) {
+	.featured-links a {
+		display: inline-block;
+	}
+
 	.item {
 		flex-basis: 100%;
 	}

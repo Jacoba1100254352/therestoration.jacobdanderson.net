@@ -173,16 +173,26 @@ describe("the Restoration application", () => {
 		await request(app).post("/accounts/admin").send({ role: "admin" }).expect(404);
 	});
 
-	it("serves static pages while keeping API misses out of the SPA fallback", async () => {
+	it("serves real pages and returns honest HTML or JSON 404 responses", async () => {
 		const staticRoot = await mkdtemp(join(tmpdir(), "restoration-static-"));
 		temporaryDirectories.push(staticRoot);
 		await writeFile(join(staticRoot, "index.html"), "<!doctype html><title>Restoration</title>");
 		await writeFile(join(staticRoot, "about.html"), "<!doctype html><title>About</title>");
+		await writeFile(join(staticRoot, "404.html"), "<!doctype html><title>Page not found</title>");
 		const app = createApp({ staticRoot });
 
 		await request(app).get("/").expect(200).expect("Cache-Control", /must-revalidate/);
 		await request(app).get("/about").expect(200).expect(/About/);
-		await request(app).get("/client-route").set("Accept", "text/html").expect(200);
+		await request(app).get("/about/").expect(308).expect("Location", "/about");
+		await request(app).head("/about.html?source=test").expect(308).expect("Location", "/about?source=test");
+		await request(app).get("/index.html").expect(308).expect("Location", "/");
+		await request(app).get("/client-route").set("Accept", "text/html").expect(404).expect(/Page not found/);
+		const missingHead = await request(app).head("/client-route").set("Accept", "text/html").expect(404);
+		expect(missingHead.text).toBeUndefined();
+		await request(app).get("/404").expect(404).expect(/Page not found/);
+		await request(app).get("/404.html").expect(404).expect(/Page not found/);
+		await request(app).get("/client-route").set("Accept", "application/json").expect(404, { ok: false, error: "not-found" });
+		await request(app).get("/api").set("Accept", "text/html").expect(404, { ok: false, error: "not-found" }).expect("Cache-Control", "no-store");
 		await request(app).get("/missing.js").expect(404);
 		await request(app).get("/api/missing").set("Accept", "text/html").expect(404);
 		await request(app).get("/accounts/me").set("Accept", "text/html").expect(404);
