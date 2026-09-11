@@ -45,17 +45,18 @@
   `front-end/cypress/fixtures/`.
 - Back-end tests live under `back-end/test/`; cover request bounds, security headers, rate limits, sanitized failures,
   readiness behavior, and the deliberate absence of account/admin/database routes.
-- Aim to cover new endpoints, Pinia stores, and critical user flows before requesting review; document any intentionally
-  skipped scenarios in the PR.
+- Aim to cover new endpoints, Pinia stores, and critical user flows before delivery; document any intentionally skipped
+  scenarios in the final handoff and in any required pull request.
 
-## Commit & Pull Request Guidelines
+## Commit and Review Guidelines
 
 - Follow the existing history: present-tense, concise subjects (`Add tutor availability routes`). Keep summaries under
   72 characters and expand details in the body when needed.
 - Reference GitHub issues with `Fixes #123` or `Refs #123` in the description.
-- Before opening a PR, ensure `npm run lint` and relevant tests pass, and include screenshots or screen recordings for
-  UI-facing changes.
-- PR descriptions should outline scope, testing evidence, migration steps (if any), and rollout considerations.
+- Before direct delivery or a required pull request, ensure `npm run lint` and relevant tests pass, and include
+  screenshots or screen recordings for UI-facing changes when useful.
+- The final handoff and any required pull-request description should outline scope, testing evidence, migration steps
+  (if any), and rollout considerations.
 
 ## Security & Configuration Tips
 
@@ -111,3 +112,11 @@ If `npm ci` fails because `package.json` and `package-lock.json` are out of sync
 3. Commit the resulting `package-lock.json` change with the related dependency/package change.
 
 Never commit or push dependency/package changes if root `npm ci` fails.
+
+## Direct Delivery and Pull Requests
+
+- After a coherent change set passes the repository's required checks, default to committing it and pushing it directly to the repository's default branch. Do not open a pull request unless the user explicitly asks for one, branch protection requires it, or an external-contribution policy makes direct integration inappropriate.
+- For a release-worthy application change, update the project version as required, create an annotated tag, and publish or update the corresponding GitHub release in the same work session. Keep documentation-only, formatting-only, and other non-deployable housekeeping changes as committed and pushed source changes without inventing an application release.
+- Never force-push a shared branch or move an existing published tag unless the user explicitly authorizes that exact history rewrite.
+- If automation or repository policy creates a pull request, review it, wait for required checks, merge it when safe, and remove the merged branch before wrapping up. Do not leave redundant pull requests or branches open.
+- Treat commit, push, tag, and GitHub release publication as source delivery only. Do not claim or perform production deployment unless it was separately authorized and verified.
